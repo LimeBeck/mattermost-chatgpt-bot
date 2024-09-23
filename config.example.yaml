@@ -1,0 +1,7 @@
+chatgpt:
+  apiKey: "***"
+  temperature: 1
+  model: gpt-4o
+mattermost:
+  baseUrl: http://localhost:8065
+  apiToken: '***'
