@@ -1,0 +1,8 @@
+version: '3'
+services:
+  bot:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - ./config.yaml:/app/config.yaml
