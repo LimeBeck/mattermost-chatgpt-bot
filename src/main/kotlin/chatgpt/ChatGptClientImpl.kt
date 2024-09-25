@@ -62,16 +62,14 @@ class ChatGptClientImpl(
         kotlin.runCatching {
             val url = "https://api.openai.com/v1/chat/completions"
 
+            val messages = previousMessages + Message(Role.USER, text)
+
+            logger.info("<18a8d465> Получаем ответ ChatGPT для запроса:\n" + messages.joinToString("\n") { "${it.role}: ${it.content.take(200)}" })
+
             val request = CompletionRequest(
                 model = model,
                 temperature = temperature,
-                messages = 
-                        previousMessages +
-                                Message(
-                                        role = Role.USER,
-                                        content = text,
-                                )
-
+                messages = messages
             )
 
             val response = client.post(url) {

@@ -145,7 +145,7 @@ class MattermostClientImpl(
                     userName = event.data.jsonObject["sender_name"]?.jsonPrimitive?.content ?: "unknown",
                     text = post.message,
                 )
-            }
+            }.onEach { logger.info("<eb86d64d> Сообщение от пользователя ${it.userName}: ${it.text.take(200)}") }
 
     override suspend fun sendMessage(channelId: ChannelId, message: String) {
         logger.info("<3c60bc9a> Отправка сообщения в канал $channelId: $message")
