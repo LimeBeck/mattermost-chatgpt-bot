@@ -14,6 +14,7 @@ import dev.limebeck.cache.RedisMessagesCacheService
 import org.slf4j.LoggerFactory
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+import kotlin.getOrThrow
 
 class Application
 
@@ -100,13 +101,14 @@ fun main(args: Array<String>) = SuspendApp {
                         userId = message.userId,
                         messages = previousMessages
                                 + Message(Role.USER, message.text)
-                                + Message(Role.ASSISTANT, response),
+                                + Message(Role.ASSISTANT, response.text),
                     )
                 }
 
                 mattermostClient.sendMessage(
                     message.channelId,
-                    response.getOrElse { "Произошла ошибка при обработке запроса. Код ошибки $requestUuid" },
+                    response.getOrNull()?.text?.let { it + "\n\nВаш запрос потребил ${response.getOrThrow().tokensConsumed} токенов" } 
+                        ?: "Произошла ошибка при обработке запроса. Код ошибки $requestUuid",
                 )
             }
         }

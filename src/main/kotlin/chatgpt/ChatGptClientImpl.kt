@@ -58,7 +58,7 @@ class ChatGptClientImpl(
         }
     }
 
-    override suspend fun getCompletion(text: String, previousMessages: List<Message>): Result<String> =
+    override suspend fun getCompletion(text: String, previousMessages: List<Message>): Result<Completion> =
         kotlin.runCatching {
             val url = "https://api.openai.com/v1/chat/completions"
 
@@ -80,7 +80,7 @@ class ChatGptClientImpl(
             }.body<CompletionResponse>()
 
             logger.info("<6f1106dd> Запрос успешно завершен, использовано ${response.usage.totalTokens} токенов")
-            response.choices.first().message.content
+            Completion(response.choices.first().message.content, response.usage.totalTokens)
         }
 
     @Serializable
