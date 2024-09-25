@@ -25,6 +25,8 @@ hoplite-yaml = { module = "com.sksamuel.hoplite:hoplite-yaml", version.ref = "ho
 
 suspendapp = { module = "io.arrow-kt:suspendapp", version = "0.4.1-alpha.5" }
 
+redis = { module = "io.github.crackthecodeabhi:kreds", version = "0.9.1" }
+
 [plugins]
 
 ktor = { id = "io.ktor.plugin", version.ref = "ktor" }

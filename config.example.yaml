@@ -5,3 +5,5 @@ chatgpt:
 mattermost:
   baseUrl: http://localhost:8065
   apiToken: '***'
+cache:
+  endpoint: "redis:6379"

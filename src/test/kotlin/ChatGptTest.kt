@@ -14,7 +14,7 @@ class ChatGptTest {
         )
 
         val response = runBlocking {
-            client.getCompletion("Напиши чат бота Mattermost на языке Kotlin с использованием фремворка Ktor для работы с ChatGPT")
+            client.getCompletion("Напиши чат бота Mattermost на языке Kotlin с использованием фремворка Ktor для работы с ChatGPT", emptyList())
         }
 
         println(response.getOrNull())

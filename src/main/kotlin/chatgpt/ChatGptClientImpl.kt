@@ -58,19 +58,20 @@ class ChatGptClientImpl(
         }
     }
 
-    override suspend fun getCompletion(text: String): Result<String> =
+    override suspend fun getCompletion(text: String, previousMessages: List<Message>): Result<String> =
         kotlin.runCatching {
             val url = "https://api.openai.com/v1/chat/completions"
 
             val request = CompletionRequest(
                 model = model,
                 temperature = temperature,
-                messages = listOf(
-                    Message(
-                        role = Role.USER,
-                        text = text,
-                    ),
-                ),
+                messages = 
+                        previousMessages +
+                                Message(
+                                        role = Role.USER,
+                                        content = text,
+                                )
+
             )
 
             val response = client.post(url) {
@@ -79,7 +80,7 @@ class ChatGptClientImpl(
             }.body<CompletionResponse>()
 
             logger.info("<6f1106dd> Запрос успешно завершен, использовано ${response.usage.totalTokens} токенов")
-            response.choices.first().message.text
+            response.choices.first().message.content
         }
 
     @Serializable
@@ -90,28 +91,10 @@ class ChatGptClientImpl(
     )
 
     @Serializable
-    data class Message(
-        val role: Role,
-        val text: String,
-    )
-
-    @Serializable
-    enum class Role {
-        @SerialName("assistant")
-        ASSISTANT,
-
-        @SerialName("system")
-        SYSTEM,
-
-        @SerialName("user")
-        USER
-    }
-
-    @Serializable
     data class CompletionResponse(
         val choices: List<Choice>,
         val usage: Usage,
-        val modelVersion: String
+        val model: String,
     ) {
         @Serializable
         data class Choice(

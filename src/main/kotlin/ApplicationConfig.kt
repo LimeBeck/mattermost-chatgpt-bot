@@ -7,6 +7,7 @@ data class ApplicationConfig(
     val chatgpt: ChatGptConfig,
     val mattermost: MattermostConfig,
     val allowedTeams: List<TeamId>? = null,
+    val cache: CacheConfig,
 )
 
 data class ChatGptConfig(
@@ -19,3 +20,8 @@ data class MattermostConfig(
     val baseUrl: String,
     val apiToken: String
 )
+
+sealed interface CacheConfig {
+    data object InMemory : CacheConfig
+    data class Redis(val endpoint: String) : CacheConfig
+}

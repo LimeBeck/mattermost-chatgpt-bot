@@ -13,6 +13,7 @@ data class DirectMessage(
     val channelId: ChannelId,
     val userId: UserId,
     val text: String,
+    val userName: String,
 )
 
 @Serializable

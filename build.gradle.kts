@@ -11,7 +11,7 @@ group = "dev.limebeck"
 version = "0.0.1"
 
 application {
-    mainClass.set("ru.cib.ApplicationKt")
+    mainClass.set("dev.limebeck.ApplicationKt")
 }
 
 repositories {
@@ -35,6 +35,8 @@ dependencies {
     implementation(libs.hoplite.core)
     implementation(libs.hoplite.yaml)
     implementation(libs.suspendapp)
+    
+    implementation(libs.redis)
 
     testImplementation(libs.kotlin.junit)
 }

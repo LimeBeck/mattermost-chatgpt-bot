@@ -137,9 +137,16 @@ class MattermostClientImpl(
     override suspend fun receiveDirectMessages(): Flow<DirectMessage> =
         flow
             .filter { it.event == "posted" }
-            .map { jsonMapper.decodeFromString<Post>(it.data.jsonObject["post"]?.jsonPrimitive?.content!!) }
-            .filter { it.props?.get("from_bot")?.jsonPrimitive?.booleanOrNull != true }
-            .map { DirectMessage(it.channelId, it.userId, it.message) }
+            .map { it to jsonMapper.decodeFromString<Post>(it.data.jsonObject["post"]?.jsonPrimitive?.content!!) }
+            .filter { (event, post) -> post.props?.get("from_bot")?.jsonPrimitive?.booleanOrNull != true }
+            .map { (event, post) ->
+                DirectMessage(
+                    channelId = post.channelId,
+                    userId = post.userId,
+                    userName = event.data.jsonObject["sender_name"]?.jsonPrimitive?.content ?: "unknown",
+                    text = post.message,
+                )
+            }
 
     override suspend fun sendMessage(channelId: ChannelId, message: String) {
         logger.info("<3c60bc9a> Отправка сообщения в канал $channelId: $message")
