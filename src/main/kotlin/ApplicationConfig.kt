@@ -1,6 +1,7 @@
 package dev.limebeck
 
 import dev.limebeck.mattermost.TeamId
+import com.sksamuel.hoplite.Masked
 
 
 data class ApplicationConfig(
@@ -13,12 +14,12 @@ data class ApplicationConfig(
 data class ChatGptConfig(
     val temperature: Float,
     val model: String,
-    val apiKey: String,
+    val apiKey: Masked,
 )
 
 data class MattermostConfig(
     val baseUrl: String,
-    val apiToken: String
+    val apiToken: Masked
 )
 
 sealed interface CacheConfig {

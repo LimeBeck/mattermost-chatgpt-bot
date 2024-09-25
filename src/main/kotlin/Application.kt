@@ -35,13 +35,13 @@ fun main(args: Array<String>) = SuspendApp {
     logger.info("<b5e80b85> Загружен конфиг: $config")
 
     val gptService = ChatGptClientImpl(
-        apiKey = config.chatgpt.apiKey,
+        apiKey = config.chatgpt.apiKey.value,
         model = config.chatgpt.model,
         temperature = config.chatgpt.temperature
     )
 
     val mattermostClient = MattermostClientImpl(
-        apiToken = config.mattermost.apiToken,
+        apiToken = config.mattermost.apiToken.value,
         baseUrl = config.mattermost.baseUrl,
     )
 
