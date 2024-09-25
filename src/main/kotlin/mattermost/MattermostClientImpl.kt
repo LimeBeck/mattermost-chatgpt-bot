@@ -77,10 +77,9 @@ class MattermostClientImpl(
     private fun launch() {
         scope.launch {
             client.webSocket(
-                HttpMethod.Get,
                 baseUrl
-                    .replace("http://", "")
-                    .replace("https://", "")
+                    .replace("http://", "ws://")
+                    .replace("https://", "wss://")
                         + API_PATH
                         + "/websocket",
             ) {
