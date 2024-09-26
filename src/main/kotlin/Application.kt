@@ -47,7 +47,7 @@ fun main(args: Array<String>) = SuspendApp {
 
     val messagesCacheService = when (config.cache) {
         is CacheConfig.InMemory -> InMemoryMessagesCacheService()
-        is CacheConfig.Redis -> RedisMessagesCacheService(config.cache.endpoint)
+        is CacheConfig.Redis -> RedisMessagesCacheService(config.cache.endpoint, config.cache.expiration)
     }
 
 

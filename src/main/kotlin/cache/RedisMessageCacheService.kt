@@ -7,9 +7,12 @@ import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import dev.limebeck.chatgpt.Message
 import dev.limebeck.mattermost.UserId
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
 
 class RedisMessagesCacheService(
-    endpoint: String
+    endpoint: String,
+    private val expiration: Duration = 1.hours,
 ) : MessagesCacheService {
     private val client = newClient(Endpoint.from(endpoint))
 
@@ -28,6 +31,7 @@ class RedisMessagesCacheService(
 
     override suspend fun put(userId: UserId, messages: List<Message>) {
         client.set(userId.value, json.encodeToString(messages))
+        client.expire(userId.value, expiration.inWholeSeconds.toULong())
     }
 
     override suspend fun get(userId: UserId): List<Message>? =

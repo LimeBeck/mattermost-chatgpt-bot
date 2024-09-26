@@ -6,4 +6,5 @@ mattermost:
   baseUrl: http://localhost:8065
   apiToken: '***'
 cache:
+  expiration: 1h
   endpoint: "redis:6379"

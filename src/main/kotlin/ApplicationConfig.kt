@@ -2,6 +2,7 @@ package dev.limebeck
 
 import dev.limebeck.mattermost.TeamId
 import com.sksamuel.hoplite.Masked
+import kotlin.time.Duration
 
 
 data class ApplicationConfig(
@@ -24,5 +25,8 @@ data class MattermostConfig(
 
 sealed interface CacheConfig {
     data object InMemory : CacheConfig
-    data class Redis(val endpoint: String) : CacheConfig
+    data class Redis(
+        val endpoint: String,
+        val expiration: Duration,
+    ) : CacheConfig
 }
