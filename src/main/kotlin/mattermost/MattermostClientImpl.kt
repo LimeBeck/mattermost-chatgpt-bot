@@ -104,6 +104,10 @@ class MattermostClientImpl(
         startWebSocketSession(url)
     }
 
+    init {
+        launch()
+    }
+
     @Serializable
     data class InternalEvent(
         val event: String,
