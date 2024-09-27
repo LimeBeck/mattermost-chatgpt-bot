@@ -71,34 +71,36 @@ class MattermostClientImpl(
 
     private val flow = MutableSharedFlow<InternalEvent>()
 
-    private val scope = CoroutineScope(Dispatchers.Default)
+    private val scope = CoroutineScope(Dispatchers.IO)
 
-    private fun launch() {
-        scope.launch {
-            client.webSocket(
-                baseUrl
-                    .replace("http://", "ws://")
-                    .replace("https://", "wss://")
-                        + API_PATH
-                        + "/websocket",
-            ) {
-                logger.info("<3eaf6bd6> Установлено подключение по WebSocket")
-                while (true) {
-                    val message = incoming.receive() as? Frame.Text
-                    if (message != null) {
-                        logger.debug("<c362de7a> Получено сообщение из WebSocket: ${message.readText()}")
-                        val event = jsonMapper.decodeFromString<InternalEvent>(message.readText())
-                        flow.emit(event)
+    private fun startWebSocketSession(websocketUrl: String) = scope.launch {
+        while (isActive) {
+            try {
+                client.webSocket(websocketUrl) {
+                    logger.info("<3eaf6bd6> Установлено подключение по WebSocket к $websocketUrl")
+                    for (frame in incoming) {
+                        val message = frame as? Frame.Text
+                        if (message != null) {
+                            val text = message.readText()
+                            logger.debug("<c362de7a> Получено сообщение из WebSocket: $text")
+                            val event = jsonMapper.decodeFromString<InternalEvent>(text)
+                            flow.emit(event)
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                logger.error("<123dd0ba> WebSocket error:", e)
+                // Логируем и ждем перед повторным подключением
+                delay(3000)
             }
-        }.invokeOnCompletion {
-            launch()
         }
     }
 
-    init {
-        launch()
+    private fun launch() {
+        val url = baseUrl
+            .replace("http://", "ws://")
+            .replace("https://", "wss://") + API_PATH + "/websocket"
+        startWebSocketSession(url)
     }
 
     @Serializable
