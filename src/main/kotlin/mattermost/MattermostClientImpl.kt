@@ -153,6 +153,17 @@ class MattermostClientImpl(
                 )
             }.onEach { logger.info("<eb86d64d> Сообщение от пользователя ${it.userName}: ${it.text.take(200)}") }
 
+    override suspend fun receiveNewChatStarted(): Flow<NewChatStartedEvent> = flow
+            .filter { it.event == "direct_added" }
+            .map { event -> event to event.data.jsonObject["creator_id"]?.jsonPrimitive?.content?.let { UserId(it) } }
+            .filter { (event, userId) -> userId != null && event.broadcast.channelId != null }
+            .map { (event, userId) ->
+                NewChatStartedEvent(
+                    channelId = event.broadcast.channelId!!,
+                    userId = userId!!,
+                )
+            }.onEach { logger.info("<eeb2bb55> Новый чат с пользователем с ID ${it.userId}") }
+
     override suspend fun sendMessage(channelId: ChannelId, message: String) {
         logger.info("<3c60bc9a> Отправка сообщения в канал $channelId: $message")
         val result = client.post("$baseUrl$API_PATH/posts") {

@@ -12,6 +12,8 @@ import dev.limebeck.mattermost.MattermostClientImpl
 import dev.limebeck.cache.InMemoryMessagesCacheService
 import dev.limebeck.cache.RedisMessagesCacheService
 import org.slf4j.LoggerFactory
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import kotlin.getOrThrow
@@ -50,67 +52,90 @@ fun main(args: Array<String>) = SuspendApp {
         is CacheConfig.Redis -> RedisMessagesCacheService(config.cache.endpoint, config.cache.expiration)
     }
 
-
-    mattermostClient.receiveDirectMessages().collect { message ->
-        val requestUuid = Uuid.random().toString()
-        config.allowedTeams?.let {
-            val inAllowedTeam = it.any { team ->
-                mattermostClient.isMemberOfTeam(message.userId, team)
-            }
-            if (!inAllowedTeam) {
-                mattermostClient.sendMessage(
-                    message.channelId,
-                    "К сожалению, у вас еще нет доступа. Функционал работает в режиме тестирования.",
-                )
-                return@collect
+    val helpMessage = """
+        Я - умный чат-бот. Сейчас я работаю через модель ${config.chatgpt.model}. 
+        Меня можно спрашивать о чем угодно, главное - помнить о безопасности данных.
+        Контекст чата сохраняется${
+            when (config.cache) {
+                is CacheConfig.InMemory -> " в памяти до рестарта сервера."
+                is CacheConfig.Redis -> ", но не долго - всего " + config.cache.expiration.inWholeMinutes + " минут."
             }
         }
+        
+        Доступные команды:
+        * `help` - вывести это сообщение
+        * `end` - сбросить контекст (завершить этот чат и начать новый)
+    """.trimIndent()
 
-        when {
-            message.text.equals("end", ignoreCase = true) -> {
-                logger.info("<6715dde2> Очистка сессии клиента ${message.userName}")
-                messagesCacheService.put(message.userId, emptyList())
+
+    val jobs = buildList {
+        launch {
+            mattermostClient.receiveNewChatStarted().collect { newChatStarted ->
                 mattermostClient.sendMessage(
-                    channelId = message.channelId,
-                    message = "Сессия успешно завершена",
+                    channelId = newChatStarted.channelId,
+                    message = "Привет!\n$helpMessage",
                 )
             }
-
-            message.text.equals("help", ignoreCase = true) -> {
-                mattermostClient.sendMessage(
-                    channelId = message.channelId,
-                    message = """
-                        ## Я - умный чат-бот
-                        
-                        Сейчас я работаю через модель ${config.chatgpt.model}
-                        
-                        Доступные команды:
-                        * `help` - вывести это сообщение
-                        * `end` - сбросить контекст (завершить этот чат и начать новый)
-                    """.trimIndent(),
-                )
-            }
-
-            else -> {
-                logger.info("<173c4c43> Обработка запроса клиента ${message.userName}")
-                val previousMessages = messagesCacheService.get(message.userId) ?: emptyList()
-                val response = gptService.getCompletion(message.text, previousMessages).onFailure { t ->
-                    logger.error("<ea88cf0c> Произошла ошибка при обработке запроса $requestUuid", t)
-                }.onSuccess { response ->
-                    messagesCacheService.put(
-                        userId = message.userId,
-                        messages = previousMessages
-                                + Message(Role.USER, message.text)
-                                + Message(Role.ASSISTANT, response.text),
-                    )
+        }
+        launch {
+            mattermostClient.receiveDirectMessages().collect { message ->
+                val requestUuid = Uuid.random().toString()
+                config.allowedTeams?.let {
+                    val inAllowedTeam = it.any { team ->
+                        mattermostClient.isMemberOfTeam(message.userId, team)
+                    }
+                    if (!inAllowedTeam) {
+                        mattermostClient.sendMessage(
+                            message.channelId,
+                            "К сожалению, у вас еще нет доступа. Функционал работает в режиме тестирования.",
+                        )
+                        return@collect
+                    }
                 }
 
-                mattermostClient.sendMessage(
-                    message.channelId,
-                    response.getOrNull()?.text?.let { it + "\n\nВаш запрос потребил ${response.getOrThrow().tokensConsumed} токенов" } 
-                        ?: "Произошла ошибка при обработке запроса. Код ошибки $requestUuid",
-                )
+                when {
+                    message.text.equals("end", ignoreCase = true) -> {
+                        logger.info("<6715dde2> Очистка сессии клиента ${message.userName}")
+                        messagesCacheService.put(message.userId, emptyList())
+                        mattermostClient.sendMessage(
+                            channelId = message.channelId,
+                            message = "Сессия успешно завершена",
+                        )
+                    }
+
+                    message.text.equals("help", ignoreCase = true) -> {
+                        mattermostClient.sendMessage(
+                            channelId = message.channelId,
+                            message = helpMessage,
+                        )
+                    }
+
+                    else -> {
+                        logger.info("<173c4c43> Обработка запроса клиента ${message.userName}")
+                        val previousMessages = messagesCacheService.get(message.userId) ?: emptyList()
+                        val response = gptService.getCompletion(message.text, previousMessages).onFailure { t ->
+                            logger.error("<ea88cf0c> Произошла ошибка при обработке запроса $requestUuid", t)
+                        }.onSuccess { response ->
+                            messagesCacheService.put(
+                                userId = message.userId,
+                                messages = previousMessages
+                                        + Message(Role.USER, message.text)
+                                        + Message(Role.ASSISTANT, response.text),
+                            )
+                        }
+
+                        mattermostClient.sendMessage(
+                            message.channelId,
+                            response.getOrNull()?.text?.let {
+                                val tokens = response.getOrThrow().tokensConsumed
+                                "$it\n\nВаш запрос потребил $tokens токенов"
+                            } ?: "Произошла ошибка при обработке запроса. Код ошибки $requestUuid",
+                        )
+                    }
+                }
             }
-        }
+        }.also { add(it) }
     }
+
+    jobs.joinAll()
 }

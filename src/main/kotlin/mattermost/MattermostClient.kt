@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 
 interface MattermostClient {
     suspend fun receiveDirectMessages(): Flow<DirectMessage>
+    suspend fun receiveNewChatStarted(): Flow<NewChatStartedEvent>
     suspend fun sendMessage(channelId: ChannelId, message: String)
     suspend fun isMemberOfTeam(userId: UserId, teamId: TeamId): Boolean
 }
@@ -14,6 +15,11 @@ data class DirectMessage(
     val userId: UserId,
     val text: String,
     val userName: String,
+)
+
+data class NewChatStartedEvent(
+    val userId: UserId,
+    val channelId: ChannelId,
 )
 
 @Serializable
