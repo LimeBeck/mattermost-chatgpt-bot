@@ -137,6 +137,7 @@ class MattermostClientImpl(
     data class PostToSend(
         @SerialName("channel_id") val channelId: ChannelId,
         val message: String,
+        val props: JsonObject
     )
 
     override suspend fun receiveDirectMessages(): Flow<DirectMessage> =
@@ -167,7 +168,7 @@ class MattermostClientImpl(
     override suspend fun sendMessage(channelId: ChannelId, message: String) {
         logger.info("<3c60bc9a> Отправка сообщения в канал $channelId: $message")
         val result = client.post("$baseUrl$API_PATH/posts") {
-            setBody(PostToSend(channelId, message))
+            setBody(PostToSend(channelId, message, JsonObject(mapOf("from_bot" to JsonPrimitive(true)))))
         }
 
         if (result.status != HttpStatusCode.Created) {
