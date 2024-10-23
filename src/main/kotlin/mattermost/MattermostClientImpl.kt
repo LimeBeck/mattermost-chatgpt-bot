@@ -144,8 +144,10 @@ class MattermostClientImpl(
         flow
             .filter { it.event == "posted" }
             .map { it to jsonMapper.decodeFromString<Post>(it.data.jsonObject["post"]?.jsonPrimitive?.content!!) }
-            .filter { (event, post) -> post.props?.get("from_bot")?.jsonPrimitive?.booleanOrNull != true }
-            .map { (event, post) ->
+            .filter { (event, post) ->
+                post.props?.get("from_bot")?.jsonPrimitive?.booleanOrNull != true
+                        && event.data.jsonObject["channel_type"]?.jsonPrimitive?.content == "D"
+            }.map { (event, post) ->
                 DirectMessage(
                     channelId = post.channelId,
                     userId = post.userId,
