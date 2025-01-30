@@ -7,16 +7,12 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.plugins.websocket.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.websocket.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.*
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
@@ -72,7 +68,7 @@ class MattermostClientImpl(
 
     private val flow = MutableSharedFlow<InternalEvent>()
 
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private fun startWebSocketSession(websocketUrl: String) = scope.launch {
         while (isActive) {
@@ -95,13 +91,16 @@ class MattermostClientImpl(
                 delay(3000)
             }
         }
+        coroutineContext[Job]!!.invokeOnCompletion {
+            logger.info("<92372683> Закрыто подключение по WebSocket", it)
+        }
     }
 
     private fun launch() {
         val url = baseUrl
             .replace("http://", "ws://")
             .replace("https://", "wss://") + API_PATH + "/websocket"
-        startWebSocketSession(url)
+        startWebSocketSession(url).invokeOnCompletion { startWebSocketSession(url) }
     }
 
     init {
@@ -157,15 +156,15 @@ class MattermostClientImpl(
             }.onEach { logger.info("<eb86d64d> Сообщение от пользователя ${it.userName}: ${it.text.take(200)}") }
 
     override suspend fun receiveNewChatStarted(): Flow<NewChatStartedEvent> = flow
-            .filter { it.event == "direct_added" }
-            .map { event -> event to event.data.jsonObject["creator_id"]?.jsonPrimitive?.content?.let { UserId(it) } }
-            .filter { (event, userId) -> userId != null && event.broadcast.channelId != null }
-            .map { (event, userId) ->
-                NewChatStartedEvent(
-                    channelId = event.broadcast.channelId!!,
-                    userId = userId!!,
-                )
-            }.onEach { logger.info("<eeb2bb55> Новый чат с пользователем с ID ${it.userId}") }
+        .filter { it.event == "direct_added" }
+        .map { event -> event to event.data.jsonObject["creator_id"]?.jsonPrimitive?.content?.let { UserId(it) } }
+        .filter { (event, userId) -> userId != null && event.broadcast.channelId != null }
+        .map { (event, userId) ->
+            NewChatStartedEvent(
+                channelId = event.broadcast.channelId!!,
+                userId = userId!!,
+            )
+        }.onEach { logger.info("<eeb2bb55> Новый чат с пользователем с ID ${it.userId}") }
 
     override suspend fun sendMessage(channelId: ChannelId, message: String) {
         logger.info("<3c60bc9a> Отправка сообщения в канал $channelId: $message")
@@ -174,7 +173,7 @@ class MattermostClientImpl(
         }
 
         if (result.status != HttpStatusCode.Created) {
-            throw RuntimeException("<b326ae01> Ошибка отправки сообщения в Mattermost status = ${result.status}")
+            throw RuntimeException("<b326ae01> Ошибка отправки сообщения в Mattermost status = ${result.status}. Ответ: ${result.bodyAsText()}")
         }
     }
 
