@@ -17,10 +17,12 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import org.slf4j.LoggerFactory
+import utils.splitMarkdown
 
 class MattermostClientImpl(
     baseUrl: String,
-    private val apiToken: String
+    private val apiToken: String,
+    private val chunkSize: Int,
 ) : MattermostClient {
     companion object {
         private val logger = LoggerFactory.getLogger(MattermostClientImpl::class.java)
@@ -168,12 +170,17 @@ class MattermostClientImpl(
 
     override suspend fun sendMessage(channelId: ChannelId, message: String) {
         logger.info("<3c60bc9a> Отправка сообщения в канал $channelId: $message")
-        val result = client.post("$baseUrl$API_PATH/posts") {
-            setBody(PostToSend(channelId, message, JsonObject(mapOf("from_bot" to JsonPrimitive(true)))))
-        }
 
-        if (result.status != HttpStatusCode.Created) {
-            throw RuntimeException("<b326ae01> Ошибка отправки сообщения в Mattermost status = ${result.status}. Ответ: ${result.bodyAsText()}")
+        val messageChunks = splitMarkdown(message, chunkSize)
+
+        for (chunk in messageChunks) {
+            val result = client.post("$baseUrl$API_PATH/posts") {
+                setBody(PostToSend(channelId, chunk, JsonObject(mapOf("from_bot" to JsonPrimitive(true)))))
+            }
+
+            if (result.status != HttpStatusCode.Created) {
+                throw RuntimeException("<b326ae01> Ошибка отправки сообщения в Mattermost status = ${result.status}. Ответ: ${result.bodyAsText()}")
+            }
         }
     }
 

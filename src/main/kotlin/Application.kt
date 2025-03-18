@@ -45,6 +45,7 @@ fun main(args: Array<String>) = SuspendApp {
     val mattermostClient = MattermostClientImpl(
         apiToken = config.mattermost.apiToken.value,
         baseUrl = config.mattermost.baseUrl,
+        chunkSize = config.mattermost.chunkSize,
     )
 
     val messagesCacheService = when (config.cache) {

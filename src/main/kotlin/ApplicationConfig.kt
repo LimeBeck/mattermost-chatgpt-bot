@@ -20,7 +20,8 @@ data class ChatGptConfig(
 
 data class MattermostConfig(
     val baseUrl: String,
-    val apiToken: Masked
+    val apiToken: Masked,
+    val chunkSize: Int = 16383,
 )
 
 sealed interface CacheConfig {
