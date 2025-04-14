@@ -72,37 +72,32 @@ class MattermostClientImpl(
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    private fun startWebSocketSession(websocketUrl: String) = scope.launch {
-        while (isActive) {
-            try {
-                client.webSocket(websocketUrl) {
-                    logger.info("<3eaf6bd6> Установлено подключение по WebSocket к $websocketUrl")
-                    for (frame in incoming) {
-                        val message = frame as? Frame.Text
-                        if (message != null) {
-                            val text = message.readText()
-                            logger.debug("<c362de7a> Получено сообщение из WebSocket: $text")
-                            val event = jsonMapper.decodeFromString<InternalEvent>(text)
-                            flow.emit(event)
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                logger.error("<123dd0ba> WebSocket error:", e)
-                // Логируем и ждем перед повторным подключением
-                delay(3000)
-            }
-        }
-        coroutineContext[Job]!!.invokeOnCompletion {
-            logger.info("<92372683> Закрыто подключение по WebSocket", it)
-        }
-    }
-
     private fun launch() {
         val url = baseUrl
             .replace("http://", "ws://")
             .replace("https://", "wss://") + API_PATH + "/websocket"
-        startWebSocketSession(url).invokeOnCompletion { startWebSocketSession(url) }
+
+        scope.launch {
+            while (isActive) {
+                try {
+                    client.webSocket(url) {
+                        logger.info("<3eaf6bd6> WebSocket соединение установлено: $url")
+                        for (frame in incoming) {
+                            val message = frame as? Frame.Text
+                            if (message != null) {
+                                val text = message.readText()
+                                logger.debug("<c362de7a> Получено сообщение из WebSocket: $text")
+                                val event = jsonMapper.decodeFromString<InternalEvent>(text)
+                                flow.emit(event)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.error("WebSocket error:", e)
+                    delay(3000) // Пауза перед reconnection
+                }
+            }
+        }
     }
 
     init {
