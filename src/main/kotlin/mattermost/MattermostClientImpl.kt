@@ -1,7 +1,7 @@
 package dev.limebeck.mattermost
 
 import io.ktor.client.*
-import io.ktor.client.engine.okhttp.*
+import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
@@ -37,13 +37,7 @@ class MattermostClientImpl(
         encodeDefaults = true
     }
 
-    private val client = HttpClient(OkHttp) {
-        engine {
-            config {
-                followRedirects(true)
-            }
-        }
-
+    private val client = HttpClient(CIO) {
         defaultRequest {
             contentType(ContentType.Application.Json)
             bearerAuth(apiToken)
