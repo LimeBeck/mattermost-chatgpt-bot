@@ -113,7 +113,7 @@ fun main(args: Array<String>) = SuspendApp {
                     else -> {
                         logger.info("<173c4c43> Обработка запроса клиента ${message.userName}")
                         val passiveAggressiveMode = message.userName in config.aggressiveModeUsers
-                        val previousMessages = messagesCacheService.get(message.userId)
+                        val previousMessages = messagesCacheService.get(message.userId)?.takeIf { it.isNotEmpty() }
                             ?: if (passiveAggressiveMode) {
                                 listOf(Message(Role.SYSTEM, "Действуй как пассивно-агрессивный сеньор разработчик c учетом запроса пользователя"))
                             } else {
