@@ -5,18 +5,17 @@ import com.sksamuel.hoplite.ConfigLoaderBuilder
 import com.sksamuel.hoplite.addCommandLineSource
 import com.sksamuel.hoplite.addEnvironmentSource
 import com.sksamuel.hoplite.addFileSource
+import dev.limebeck.cache.InMemoryMessagesCacheService
+import dev.limebeck.cache.RedisMessagesCacheService
 import dev.limebeck.chatgpt.ChatGptClientImpl
 import dev.limebeck.chatgpt.Message
 import dev.limebeck.chatgpt.Role
 import dev.limebeck.mattermost.MattermostClientImpl
-import dev.limebeck.cache.InMemoryMessagesCacheService
-import dev.limebeck.cache.RedisMessagesCacheService
-import org.slf4j.LoggerFactory
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import org.slf4j.LoggerFactory
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
-import kotlin.getOrThrow
 
 class Application
 
@@ -57,11 +56,11 @@ fun main(args: Array<String>) = SuspendApp {
         Я - умный чат-бот. Сейчас я работаю через модель ${config.chatgpt.model}. 
         Меня можно спрашивать о чем угодно, главное - помнить о безопасности данных.
         Контекст чата сохраняется${
-            when (config.cache) {
-                is CacheConfig.InMemory -> " в памяти до рестарта сервера."
-                is CacheConfig.Redis -> ", но не долго - всего " + config.cache.expiration.inWholeMinutes + " минут."
-            }
+        when (config.cache) {
+            is CacheConfig.InMemory -> " в памяти до рестарта сервера."
+            is CacheConfig.Redis -> ", но не долго - всего " + config.cache.expiration.inWholeMinutes + " минут."
         }
+    }
         
         Доступные команды:
         * `help` - вывести это сообщение
@@ -113,7 +112,14 @@ fun main(args: Array<String>) = SuspendApp {
 
                     else -> {
                         logger.info("<173c4c43> Обработка запроса клиента ${message.userName}")
-                        val previousMessages = messagesCacheService.get(message.userId) ?: emptyList()
+                        val passiveAggressiveMode = message.userName in config.aggressiveModeUsers
+                        val previousMessages = messagesCacheService.get(message.userId)
+                            ?: if (passiveAggressiveMode) {
+                                listOf(Message(Role.SYSTEM, "Действуй как пассивно-агрессивный сеньор разработчик c учетом запроса пользователя"))
+                            } else {
+                                emptyList()
+                            }
+
                         val response = gptService.getCompletion(message.text, previousMessages).onFailure { t ->
                             logger.error("<ea88cf0c> Произошла ошибка при обработке запроса $requestUuid", t)
                         }.onSuccess { response ->

@@ -10,6 +10,7 @@ data class ApplicationConfig(
     val mattermost: MattermostConfig,
     val allowedTeams: List<TeamId>? = null,
     val cache: CacheConfig,
+    val aggressiveModeUsers: List<String> = listOf(),
 )
 
 data class ChatGptConfig(
