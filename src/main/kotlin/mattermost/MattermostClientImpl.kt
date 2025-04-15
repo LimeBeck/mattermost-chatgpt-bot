@@ -18,7 +18,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import org.slf4j.LoggerFactory
 import utils.splitMarkdown
-import kotlin.math.log
 
 class MattermostClientImpl(
     baseUrl: String,
@@ -171,16 +170,29 @@ class MattermostClientImpl(
 
         try {
             for (chunk in messageChunks) {
-                val result = client.post("$baseUrl$API_PATH/posts") {
-                    setBody(PostToSend(channelId, chunk, JsonObject(mapOf("from_bot" to JsonPrimitive(true)))))
-                }
+                repeatOnException(10) {
+                    val result = client.post("$baseUrl$API_PATH/posts") {
+                        setBody(PostToSend(channelId, chunk, JsonObject(mapOf("from_bot" to JsonPrimitive(true)))))
+                    }
 
-                if (result.status != HttpStatusCode.Created) {
-                    logger.error("<b326ae01> Ошибка отправки сообщения в Mattermost status = ${result.status}. Ответ: ${result.bodyAsText()}")
+                    if (result.status != HttpStatusCode.Created) {
+                        throw RuntimeException("<b326ae01> Ошибка отправки сообщения в Mattermost status = ${result.status}. Ответ: ${result.bodyAsText()}")
+                    }
                 }
             }
         } catch (e: Exception) {
             logger.error("<9ffa0dd3> Ошибка при отправке сообщения в Mattermost:", e)
+        }
+    }
+
+    private suspend inline fun repeatOnException(retries: Int, crossinline block: suspend () -> Unit) {
+        for (i in 1..retries) {
+            try {
+                block()
+                return
+            } catch (e: Exception) {
+                logger.error("<a3c1e770> Got error #$i", e)
+            }
         }
     }
 
