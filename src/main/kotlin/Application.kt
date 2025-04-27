@@ -5,14 +5,16 @@ import com.sksamuel.hoplite.ConfigLoaderBuilder
 import com.sksamuel.hoplite.addCommandLineSource
 import com.sksamuel.hoplite.addEnvironmentSource
 import com.sksamuel.hoplite.addFileSource
-import dev.limebeck.cache.InMemoryMessagesCacheService
-import dev.limebeck.cache.RedisMessagesCacheService
+import dev.limebeck.cache.InMemoryCacheService
+import dev.limebeck.cache.RedisCacheService
 import dev.limebeck.chatgpt.ChatGptClientImpl
-import dev.limebeck.chatgpt.Message
-import dev.limebeck.chatgpt.Role
+import dev.limebeck.command.*
+import dev.limebeck.context.CachedUserContextService
+import dev.limebeck.context.RequestContext
+import dev.limebeck.context.UserContextService
+import dev.limebeck.mattermost.MattermostClient
 import dev.limebeck.mattermost.MattermostClientImpl
-import kotlinx.coroutines.joinAll
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import org.slf4j.LoggerFactory
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -37,7 +39,7 @@ fun main(args: Array<String>) = SuspendApp {
 
     val gptService = ChatGptClientImpl(
         apiKey = config.chatgpt.apiKey.value,
-        model = config.chatgpt.model,
+        model = config.chatgpt.defaultModel,
         temperature = config.chatgpt.temperature
     )
 
@@ -47,102 +49,95 @@ fun main(args: Array<String>) = SuspendApp {
         chunkSize = config.mattermost.chunkSize,
     )
 
-    val messagesCacheService = when (config.cache) {
-        is CacheConfig.InMemory -> InMemoryMessagesCacheService()
-        is CacheConfig.Redis -> RedisMessagesCacheService(config.cache.endpoint, config.cache.expiration)
+    val cacheService = when (config.cache) {
+        is CacheConfig.InMemory -> InMemoryCacheService()
+        is CacheConfig.Redis -> RedisCacheService(config.cache.endpoint, config.cache.expiration)
     }
 
-    val helpMessage = """
-        Я - умный чат-бот. Сейчас я работаю через модель ${config.chatgpt.model}. 
-        Меня можно спрашивать о чем угодно, главное - помнить о безопасности данных.
-        Контекст чата сохраняется${
-        when (config.cache) {
-            is CacheConfig.InMemory -> " в памяти до рестарта сервера."
-            is CacheConfig.Redis -> ", но не долго - всего " + config.cache.expiration.inWholeMinutes + " минут."
-        }
-    }
-        
-        Доступные команды:
-        * `help` - вывести это сообщение
-        * `end` - сбросить контекст (завершить этот чат и начать новый)
-    """.trimIndent()
+    val userContextService = CachedUserContextService(cacheService, config)
 
+    val commandSystem = CommandSystem(
+        mattermostClient = mattermostClient,
+        processors = listOf(
+            HelpCommandProcessor(mattermostClient, config),
+            SessionEndCommandProcessor(mattermostClient, userContextService),
+            CompletionCommandProcessor(gptService, userContextService, mattermostClient),
+            SetUserContextCommandProcessor(userContextService, mattermostClient, config)
+        )
+    )
 
-    val jobs = buildList {
+    val jobs = listOf(
         launch {
-            mattermostClient.receiveNewChatStarted().collect { newChatStarted ->
-                mattermostClient.sendMessage(
-                    channelId = newChatStarted.channelId,
-                    message = "Привет!\n$helpMessage",
-                )
-            }
-        }
+            handleNewChatStarted(
+                mattermostClient = mattermostClient,
+                userContextService = userContextService,
+                config = config,
+            )
+        },
         launch {
-            mattermostClient.receiveDirectMessages().collect { message ->
-                val requestUuid = Uuid.random().toString()
-                config.allowedTeams?.let {
-                    val inAllowedTeam = it.any { team ->
-                        mattermostClient.isMemberOfTeam(message.userId, team)
-                    }
-                    if (!inAllowedTeam) {
-                        mattermostClient.sendMessage(
-                            message.channelId,
-                            "К сожалению, у вас еще нет доступа. Функционал работает в режиме тестирования.",
-                        )
-                        return@collect
-                    }
-                }
-
-                when {
-                    message.text.equals("end", ignoreCase = true) -> {
-                        logger.info("<6715dde2> Очистка сессии клиента ${message.userName}")
-                        messagesCacheService.put(message.userId, emptyList())
-                        mattermostClient.sendMessage(
-                            channelId = message.channelId,
-                            message = "Сессия успешно завершена",
-                        )
-                    }
-
-                    message.text.equals("help", ignoreCase = true) -> {
-                        mattermostClient.sendMessage(
-                            channelId = message.channelId,
-                            message = helpMessage,
-                        )
-                    }
-
-                    else -> {
-                        logger.info("<173c4c43> Обработка запроса клиента ${message.userName}")
-                        val passiveAggressiveMode = message.userName in config.aggressiveModeUsers
-                        val previousMessages = messagesCacheService.get(message.userId)?.takeIf { it.isNotEmpty() }
-                            ?: if (passiveAggressiveMode) {
-                                listOf(Message(Role.SYSTEM, "Действуй как пассивно-агрессивный сеньор разработчик c учетом запроса пользователя"))
-                            } else {
-                                emptyList()
-                            }
-
-                        val response = gptService.getCompletion(message.text, previousMessages).onFailure { t ->
-                            logger.error("<ea88cf0c> Произошла ошибка при обработке запроса $requestUuid", t)
-                        }.onSuccess { response ->
-                            messagesCacheService.put(
-                                userId = message.userId,
-                                messages = previousMessages
-                                        + Message(Role.USER, message.text)
-                                        + Message(Role.ASSISTANT, response.text),
-                            )
-                        }
-
-                        mattermostClient.sendMessage(
-                            message.channelId,
-                            response.getOrNull()?.text?.let {
-                                val tokens = response.getOrThrow().tokensConsumed
-                                "$it\n\nВаш запрос потребил $tokens токенов"
-                            } ?: "Произошла ошибка при обработке запроса. Код ошибки $requestUuid",
-                        )
-                    }
-                }
-            }
-        }.also { add(it) }
-    }
+            handleNewMessage(
+                mattermostClient = mattermostClient,
+                userContextService = userContextService,
+                commandSystem = commandSystem,
+                config = config
+            )
+        }
+    )
 
     jobs.joinAll()
+}
+
+suspend fun handleNewChatStarted(
+    mattermostClient: MattermostClient,
+    userContextService: UserContextService,
+    config: ApplicationConfig
+) {
+    mattermostClient.receiveNewChatStarted().collect { newChatStarted ->
+        val userContext = userContextService.getUserContext(newChatStarted.userId)
+        mattermostClient.sendMessage(
+            channelId = newChatStarted.channelId,
+            message = "Привет!\n${createHelpMessage(config, userContext)}",
+        )
+    }
+}
+
+@OptIn(ExperimentalUuidApi::class)
+suspend fun handleNewMessage(
+    mattermostClient: MattermostClient,
+    userContextService: UserContextService,
+    commandSystem: CommandSystem,
+    config: ApplicationConfig,
+) {
+    val innerCoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(10))
+    mattermostClient.receiveDirectMessages().collect { message ->
+        innerCoroutineScope.launch {
+            val requestUuid = Uuid.random().toString()
+            config.allowedTeams?.let {
+                val inAllowedTeam = it.any { team ->
+                    mattermostClient.isMemberOfTeam(message.userId, team)
+                }
+                if (!inAllowedTeam) {
+                    mattermostClient.sendMessage(
+                        message.channelId,
+                        "К сожалению, у вас еще нет доступа. Функционал работает в режиме тестирования.",
+                    )
+                    return@launch
+                }
+            }
+
+            val userContext = userContextService.getUserContext(message.userId)
+
+            val ctx = RequestContext(
+                channelId = message.channelId,
+                userId = message.userId,
+                userName = message.userName,
+                userContext = userContext,
+                requestUuid = requestUuid,
+                message = message
+            )
+
+            val command = parseCommand(message.text)
+            commandSystem.execute(ctx, command)
+        }
+    }
 }

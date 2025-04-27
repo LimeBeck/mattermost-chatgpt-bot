@@ -1,5 +1,6 @@
 package dev.limebeck
 
+import com.sksamuel.hoplite.ConfigAlias
 import dev.limebeck.mattermost.TeamId
 import com.sksamuel.hoplite.Masked
 import kotlin.time.Duration
@@ -10,14 +11,20 @@ data class ApplicationConfig(
     val mattermost: MattermostConfig,
     val allowedTeams: List<TeamId>? = null,
     val cache: CacheConfig,
-    val aggressiveModeUsers: List<String> = listOf(),
 )
 
 data class ChatGptConfig(
     val temperature: Float,
-    val model: String,
+    @ConfigAlias("model")
+    val defaultModel: String,
+    val availableModels: Set<Model>,
     val apiKey: Masked,
-)
+) {
+    data class Model(
+        val name: String,
+        val multimodal: Boolean = false,
+    )
+}
 
 data class MattermostConfig(
     val baseUrl: String,
