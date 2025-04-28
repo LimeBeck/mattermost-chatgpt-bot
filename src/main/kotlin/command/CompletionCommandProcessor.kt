@@ -17,7 +17,18 @@ class CompletionCommandProcessor(
 
     override suspend fun processCommand(ctx: RequestContext, arguments: List<String>) {
         logger.info("<173c4c43> Обработка запроса клиента ${ctx.userName}")
-        val response = gptClient.getCompletion(ctx.message.text, ctx.userContext.previousMessages).onFailure { t ->
+        val previousMessages =
+            if (ctx.userContext.previousMessages.isEmpty() && ctx.userContext.systemMessage != null) {
+                listOf(
+                    Message(
+                        role = Role.SYSTEM,
+                        content = ctx.userContext.systemMessage
+                    )
+                )
+            } else {
+                ctx.userContext.previousMessages
+            }
+        val response = gptClient.getCompletion(ctx.message.text, previousMessages).onFailure { t ->
             logger.error("<ea88cf0c> Произошла ошибка при обработке запроса ${ctx.requestUuid}", t)
         }.onSuccess { response ->
             userContextService.updateUserContext(
