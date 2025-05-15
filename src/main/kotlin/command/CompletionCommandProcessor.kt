@@ -33,7 +33,7 @@ class CompletionCommandProcessor(
         }.onSuccess { response ->
             userContextService.updateUserContext(
                 ctx.userId, ctx.userContext.copy(
-                    previousMessages = ctx.userContext.previousMessages
+                    previousMessages = previousMessages
                             + Message(Role.USER, ctx.message.text)
                             + Message(Role.ASSISTANT, response.text)
                 )
