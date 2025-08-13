@@ -28,9 +28,9 @@ class ChatGptClientImpl(
     private val client = HttpClient(Apache) {
         engine {
             followRedirects = true
-            socketTimeout = 120_000
+            socketTimeout = 240_000
             connectTimeout = 10_000
-            connectionRequestTimeout = 120_000
+            connectionRequestTimeout = 240_000
         }
 
         install(Logging) {
