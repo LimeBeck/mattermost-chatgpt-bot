@@ -1,6 +1,7 @@
 package dev.limebeck.mattermost
 
 import io.ktor.client.*
+import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -120,7 +121,15 @@ class MattermostClientImpl(
         @SerialName("channel_id") val channelId: ChannelId,
         val message: String,
         @SerialName("user_id") val userId: UserId,
-        val props: JsonObject? = null
+        val props: JsonObject? = null,
+        @SerialName("file_ids") val fileIds: List<String>? = null,
+    )
+
+    @Serializable
+    data class FileInfo(
+        val id: String,
+        val name: String,
+        @SerialName("mime_type") val mimeType: String,
     )
 
     @Serializable
@@ -138,11 +147,26 @@ class MattermostClientImpl(
                 post.props?.get("from_bot")?.jsonPrimitive?.booleanOrNull != true
                         && event.data.jsonObject["channel_type"]?.jsonPrimitive?.content == "D"
             }.map { (event, post) ->
+                val attachments = post.fileIds?.mapNotNull { fileId ->
+                    runCatching {
+                        val info = client.get("$baseUrl$API_PATH/files/$fileId/info").body<FileInfo>()
+                        val bytes = client.get("$baseUrl$API_PATH/files/$fileId").body<ByteArray>()
+                        Attachment(
+                            id = fileId,
+                            name = info.name,
+                            mimeType = info.mimeType,
+                            data = bytes,
+                        )
+                    }.onFailure { logger.error("<download-file-error> Ошибка загрузки файла $fileId", it) }
+                        .getOrNull()
+                } ?: emptyList()
+
                 DirectMessage(
                     channelId = post.channelId,
                     userId = post.userId,
                     userName = event.data.jsonObject["sender_name"]?.jsonPrimitive?.content ?: "unknown",
                     text = post.message,
+                    attachments = attachments,
                 )
             }.onEach { logger.info("<eb86d64d> Сообщение от пользователя ${it.userName}: ${it.text.take(200)}") }
 

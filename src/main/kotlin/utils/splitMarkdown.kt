@@ -81,7 +81,10 @@ fun splitMarkdown(text: String, chunkSize: Int): List<String> {
     return chunks
 }
 
-private fun splitAndWrapBlock(block: String, chunkSize: Int): List<String> {
+private fun splitAndWrapBlock(
+    block: String,
+    chunkSize: Int,
+): List<String> {
     val result = mutableListOf<String>()
     val isCodeBlock = block.trimStart().startsWith("```") && block.trimEnd().endsWith("```")
     if (isCodeBlock) {
@@ -90,8 +93,8 @@ private fun splitAndWrapBlock(block: String, chunkSize: Int): List<String> {
             result.add(block)
             return result
         }
-        val header = lines.first()        // например, "```kotlin"
-        val footer = lines.last()           // "```"
+        val header = lines.first() // например, "```kotlin"
+        val footer = lines.last() // "```"
         val content = lines.subList(1, lines.size - 1).joinToString("\n")
         // Учитываем, что при оборачивании в каждом чанке будут добавлены header и footer с переносами строк.
         val overhead = header.length + footer.length + 2
@@ -102,11 +105,12 @@ private fun splitAndWrapBlock(block: String, chunkSize: Int): List<String> {
         }
         val parts = splitTextPreservingLines(content, allowed)
         for (part in parts) {
-            val chunk = buildString {
-                append(header).append("\n")
-                append(part.trimEnd()).append("\n")
-                append(footer)
-            }
+            val chunk =
+                buildString {
+                    append(header).append("\n")
+                    append(part.trimEnd()).append("\n")
+                    append(footer)
+                }
             result.add(chunk)
         }
     } else {
@@ -116,17 +120,21 @@ private fun splitAndWrapBlock(block: String, chunkSize: Int): List<String> {
     return result
 }
 
-private fun splitTextPreservingLines(text: String, maxLen: Int): List<String> {
+private fun splitTextPreservingLines(
+    text: String,
+    maxLen: Int,
+): List<String> {
     val lines = text.lines()
     val parts = mutableListOf<String>()
     val curr = StringBuilder()
     for (line in lines) {
         val candidate = if (curr.isEmpty()) line else curr.toString() + "\n" + line
         if (candidate.length <= maxLen) {
-            if (curr.isEmpty())
+            if (curr.isEmpty()) {
                 curr.append(line)
-            else
+            } else {
                 curr.append("\n").append(line)
+            }
         } else {
             if (curr.isNotEmpty()) {
                 parts.add(curr.toString())
@@ -144,6 +152,8 @@ private fun splitTextPreservingLines(text: String, maxLen: Int): List<String> {
             }
         }
     }
-    if (curr.isNotEmpty()) parts.add(curr.toString())
+    if (curr.isNotEmpty()) {
+        parts.add(curr.toString())
+    }
     return parts
 }

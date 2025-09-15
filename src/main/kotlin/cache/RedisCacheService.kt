@@ -22,14 +22,22 @@ class RedisCacheService(
         logger.info("<a134e07c> Connected to $endpoint")
     }
 
-    override suspend fun put(userId: UserId, key: String, value: String, expirable: Boolean) {
-        val cacheKey = "${userId.value}:${key}"
+    override suspend fun put(
+        userId: UserId,
+        key: String,
+        value: String,
+        expirable: Boolean,
+    ) {
+        val cacheKey = "${userId.value}:$key"
         client.set(cacheKey, value)
         if (expirable) {
             client.expire(cacheKey, expiration.inWholeSeconds.toULong())
         }
     }
 
-    override suspend fun get(userId: UserId, key: String): String? =
-        client.get("${userId.value}:${key}")
+    override suspend fun get(
+        userId: UserId,
+        key: String,
+    ): String? =
+        client.get("${userId.value}:$key")
 }

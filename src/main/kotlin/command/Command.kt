@@ -10,7 +10,7 @@ suspend fun parseCommand(message: String): Command =
         message.equals("end", ignoreCase = true) -> Command("end", listOf())
         message.equals("help", ignoreCase = true) -> Command("help", listOf())
         message.startsWith("$") -> {
-            //TODO: Improve parsing
+            // TODO: Improve parsing
             val commandName = message.split(' ').first()
             Command(commandName.removePrefix("$"), listOf(message.removePrefix(commandName)))
         }

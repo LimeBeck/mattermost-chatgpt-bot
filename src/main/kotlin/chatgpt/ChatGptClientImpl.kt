@@ -19,73 +19,95 @@ class ChatGptClientImpl(
     private val model: String,
     private val temperature: Float,
 ) : ChatGptClient {
-
     companion object {
         const val BASE_MODEL_NAME = "gpt-4o"
         private val logger = LoggerFactory.getLogger(ChatGptClientImpl::class.java)
     }
 
-    private val client = HttpClient(Apache) {
-        engine {
-            followRedirects = true
-            socketTimeout = 240_000
-            connectTimeout = 10_000
-            connectionRequestTimeout = 240_000
-        }
-
-        install(Logging) {
-            logger = object : Logger {
-                override fun log(message: String) {
-                    ChatGptClientImpl.logger.debug(message)
-                }
+    private val client =
+        HttpClient(Apache) {
+            engine {
+                followRedirects = true
+                socketTimeout = 240_000
+                connectTimeout = 10_000
+                connectionRequestTimeout = 240_000
             }
-            level = LogLevel.ALL
-            sanitizeHeader { it == "Authorization" }
+
+            install(Logging) {
+                logger =
+                    object : Logger {
+                        override fun log(message: String) {
+                            ChatGptClientImpl.logger.debug(message)
+                        }
+                    }
+                level = LogLevel.ALL
+                sanitizeHeader { it == "Authorization" }
+            }
+
+            install(ContentNegotiation) {
+                json(
+                    Json {
+                        ignoreUnknownKeys = true
+                        prettyPrint = true
+                        encodeDefaults = true
+                        classDiscriminator = "type"
+                    },
+                )
+            }
+
+            defaultRequest {
+                header("Authorization", "Bearer $apiKey")
+            }
         }
 
-        install(ContentNegotiation) {
-            json(
-                Json {
-                    ignoreUnknownKeys = true
-                    prettyPrint = true
-                    encodeDefaults = true
-                },
-            )
-        }
-
-        defaultRequest {
-            header("Authorization", "Bearer $apiKey")
-        }
-    }
-
-    override suspend fun getCompletion(text: String, previousMessages: List<Message>): Result<Completion> =
+    override suspend fun getCompletion(
+        message: Message,
+        previousMessages: List<Message>,
+    ): Result<Completion> =
         kotlin.runCatching {
             val url = "https://api.openai.com/v1/chat/completions"
 
-            val messages = previousMessages + Message(Role.USER, text)
+            val messages = previousMessages + message
 
-            logger.info("<18a8d465> Получаем ответ ChatGPT для запроса:\n" + messages.joinToString("\n") { "${it.role}: ${it.content.take(200)}" })
+            val logMessages =
+                messages.joinToString("\n") { msg ->
+                    val contentPreview =
+                        msg.content.joinToString(" ") { part ->
+                            when (part) {
+                                is Content.Text -> part.text.take(200)
+                                is Content.Image -> "[image]"
+                                is Content.File -> "[file:${part.file.filename}]"
+                            }
+                        }
+                    "${msg.role}: $contentPreview"
+                }
+            logger.info("<18a8d465> Получаем ответ ChatGPT для запроса:\n$logMessages")
 
-            val request = CompletionRequest(
-                model = model,
-                temperature = temperature,
-                messages = messages
-            )
+            val request =
+                CompletionRequest(
+                    model = model,
+                    temperature = temperature,
+                    messages = messages,
+                )
 
-            val response = client.post(url) {
-                contentType(ContentType.Application.Json)
-                setBody(request)
-            }.body<CompletionResponse>()
+            val response =
+                client.post(url) {
+                    contentType(ContentType.Application.Json)
+                    setBody(request)
+                }.body<CompletionResponse>()
 
             logger.info("<6f1106dd> Запрос успешно завершен, использовано ${response.usage.totalTokens} токенов")
-            Completion(response.choices.first().message.content, response.usage.totalTokens)
+            val text =
+                response.choices.first().message.content.filterIsInstance<Content.Text>()
+                    .joinToString("\n") { it.text }
+            Completion(text, response.usage.totalTokens)
         }
 
     @Serializable
     data class CompletionRequest(
         val model: String,
         val temperature: Float,
-        val messages: List<Message>
+        val messages: List<Message>,
     )
 
     @Serializable

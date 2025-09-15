@@ -27,6 +27,7 @@ class CachedUserContextService(
         private val json = Json {
             prettyPrint = true
             ignoreUnknownKeys = true
+            classDiscriminator = "type"
         }
     }
 
