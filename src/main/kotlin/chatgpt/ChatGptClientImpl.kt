@@ -87,7 +87,7 @@ class ChatGptClientImpl(
                 CompletionRequest(
                     model = model,
                     temperature = temperature,
-                    messages = messages,
+                    messages = messages.map { it.toRequestMessage() },
                 )
 
             val response =
@@ -97,9 +97,7 @@ class ChatGptClientImpl(
                 }.body<CompletionResponse>()
 
             logger.info("<6f1106dd> Запрос успешно завершен, использовано ${response.usage.totalTokens} токенов")
-            val text =
-                response.choices.first().message.content.filterIsInstance<Content.Text>()
-                    .joinToString("\n") { it.text }
+            val text = response.choices.first().message.content
             Completion(text, response.usage.totalTokens)
         }
 
@@ -108,7 +106,32 @@ class ChatGptClientImpl(
         val model: String,
         val temperature: Float,
         val messages: List<Message>,
-    )
+    ) {
+        @Serializable
+        data class Message(
+            val role: Role,
+            val content: List<Content>,
+        ) {
+            @Serializable
+            sealed class Content {
+                @Serializable
+                @SerialName("text")
+                data class Text(val text: String) : Content()
+
+                @Serializable
+                @SerialName("image_url")
+                data class Image(
+                    @SerialName("image_url") val imageUrl: ImageUrl,
+                ) : Content()
+
+                @Serializable
+                @SerialName("file")
+                data class File(
+                    val file: FileData,
+                ) : Content()
+            }
+        }
+    }
 
     @Serializable
     data class CompletionResponse(
@@ -129,5 +152,24 @@ class ChatGptClientImpl(
             @SerialName("completion_tokens") val completionTokens: Long,
             @SerialName("total_tokens") val totalTokens: Long,
         )
+
+        @Serializable
+        data class Message(
+            val role: Role,
+            val content: String,
+        )
     }
+
+    private fun Message.toRequestMessage(): CompletionRequest.Message =
+        CompletionRequest.Message(
+            role = role,
+            content = content.map { it.toRequestContent() },
+        )
+
+    private fun Content.toRequestContent(): CompletionRequest.Message.Content =
+        when (this) {
+            is Content.Text -> CompletionRequest.Message.Content.Text(text)
+            is Content.Image -> CompletionRequest.Message.Content.Image(imageUrl)
+            is Content.File -> CompletionRequest.Message.Content.File(file)
+        }
 }

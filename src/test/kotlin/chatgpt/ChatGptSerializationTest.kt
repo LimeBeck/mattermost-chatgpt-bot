@@ -1,9 +1,7 @@
 package chatgpt
 
 import dev.limebeck.chatgpt.ChatGptClientImpl
-import dev.limebeck.chatgpt.Content
 import dev.limebeck.chatgpt.ImageUrl
-import dev.limebeck.chatgpt.Message
 import dev.limebeck.chatgpt.Role
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
@@ -12,9 +10,8 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
-import kotlin.test.assertTrue
 import kotlin.test.assertEquals
-import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class ChatGptSerializationTest {
     @Test
@@ -25,12 +22,14 @@ class ChatGptSerializationTest {
                 temperature = 0f,
                 messages =
                     listOf(
-                        Message(
+                        ChatGptClientImpl.CompletionRequest.Message(
                             role = Role.USER,
                             content =
                                 listOf(
-                                    Content.Text("look at this"),
-                                    Content.Image(ImageUrl("data:image/png;base64,AAA")),
+                                    ChatGptClientImpl.CompletionRequest.Message.Content.Text("look at this"),
+                                    ChatGptClientImpl.CompletionRequest.Message.Content.Image(
+                                        ImageUrl("data:image/png;base64,AAA"),
+                                    ),
                                 ),
                         ),
                     ),
@@ -95,8 +94,6 @@ class ChatGptSerializationTest {
         val response = json.decodeFromString<ChatGptClientImpl.CompletionResponse>(payload)
 
         val content = response.choices.first().message.content
-        assertEquals(1, content.size)
-        val textPart = assertIs<Content.Text>(content.first())
-        assertEquals("Hello!", textPart.text)
+        assertEquals("Hello!", content)
     }
 }
