@@ -123,7 +123,20 @@ class MattermostClientImpl(
         @SerialName("user_id") val userId: UserId,
         val props: JsonObject? = null,
         @SerialName("file_ids") val fileIds: List<String>? = null,
+        val metadata: PostMetadata? = null,
     )
+
+    @Serializable
+    data class PostMetadata(
+        val files: List<FileMetadata> = emptyList(),
+    ) {
+        @Serializable
+        data class FileMetadata(
+            val id: String,
+            val name: String? = null,
+            @SerialName("mime_type") val mimeType: String? = null,
+        )
+    }
 
     @Serializable
     data class FileInfo(
@@ -147,19 +160,38 @@ class MattermostClientImpl(
                 post.props?.get("from_bot")?.jsonPrimitive?.booleanOrNull != true
                         && event.data.jsonObject["channel_type"]?.jsonPrimitive?.content == "D"
             }.map { (event, post) ->
-                val attachments = post.fileIds?.mapNotNull { fileId ->
-                    runCatching {
-                        val info = client.get("$baseUrl$API_PATH/files/$fileId/info").body<FileInfo>()
-                        val bytes = client.get("$baseUrl$API_PATH/files/$fileId").body<ByteArray>()
-                        Attachment(
-                            id = fileId,
-                            name = info.name,
-                            mimeType = info.mimeType,
-                            data = bytes,
-                        )
-                    }.onFailure { logger.error("<download-file-error> Ошибка загрузки файла $fileId", it) }
-                        .getOrNull()
-                } ?: emptyList()
+                val fileMetadataById =
+                    buildMap {
+                        post.metadata?.files?.forEach { file ->
+                            put(file.id, file)
+                        }
+                        post.fileIds?.forEach { fileId ->
+                            putIfAbsent(fileId, PostMetadata.FileMetadata(id = fileId))
+                        }
+                    }
+
+                val attachments =
+                    fileMetadataById.values.mapNotNull { file ->
+                        runCatching {
+                            val info =
+                                if (file.name == null || file.mimeType == null) {
+                                    client.get("$baseUrl$API_PATH/files/${file.id}/info").body<FileInfo>()
+                                } else {
+                                    null
+                                }
+
+                            val bytes = client.get("$baseUrl$API_PATH/files/${file.id}").body<ByteArray>()
+
+                            Attachment(
+                                id = file.id,
+                                name = file.name ?: info?.name ?: file.id,
+                                mimeType = file.mimeType ?: info?.mimeType ?: "application/octet-stream",
+                                data = bytes,
+                            )
+                        }.onFailure {
+                            logger.error("<download-file-error> Ошибка загрузки файла ${file.id}", it)
+                        }.getOrNull()
+                    }
 
                 DirectMessage(
                     channelId = post.channelId,
