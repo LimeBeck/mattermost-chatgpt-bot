@@ -1,6 +1,7 @@
 package dev.limebeck.mattermost
 
 import io.ktor.client.*
+import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -120,7 +121,28 @@ class MattermostClientImpl(
         @SerialName("channel_id") val channelId: ChannelId,
         val message: String,
         @SerialName("user_id") val userId: UserId,
-        val props: JsonObject? = null
+        val props: JsonObject? = null,
+        @SerialName("file_ids") val fileIds: List<String>? = null,
+        val metadata: PostMetadata? = null,
+    )
+
+    @Serializable
+    data class PostMetadata(
+        val files: List<FileMetadata> = emptyList(),
+    ) {
+        @Serializable
+        data class FileMetadata(
+            val id: String,
+            val name: String? = null,
+            @SerialName("mime_type") val mimeType: String? = null,
+        )
+    }
+
+    @Serializable
+    data class FileInfo(
+        val id: String,
+        val name: String,
+        @SerialName("mime_type") val mimeType: String,
     )
 
     @Serializable
@@ -138,11 +160,45 @@ class MattermostClientImpl(
                 post.props?.get("from_bot")?.jsonPrimitive?.booleanOrNull != true
                         && event.data.jsonObject["channel_type"]?.jsonPrimitive?.content == "D"
             }.map { (event, post) ->
+                val fileMetadataById =
+                    buildMap {
+                        post.metadata?.files?.forEach { file ->
+                            put(file.id, file)
+                        }
+                        post.fileIds?.forEach { fileId ->
+                            putIfAbsent(fileId, PostMetadata.FileMetadata(id = fileId))
+                        }
+                    }
+
+                val attachments =
+                    fileMetadataById.values.mapNotNull { file ->
+                        runCatching {
+                            val info =
+                                if (file.name == null || file.mimeType == null) {
+                                    client.get("$baseUrl$API_PATH/files/${file.id}/info").body<FileInfo>()
+                                } else {
+                                    null
+                                }
+
+                            val bytes = client.get("$baseUrl$API_PATH/files/${file.id}").body<ByteArray>()
+
+                            Attachment(
+                                id = file.id,
+                                name = file.name ?: info?.name ?: file.id,
+                                mimeType = file.mimeType ?: info?.mimeType ?: "application/octet-stream",
+                                data = bytes,
+                            )
+                        }.onFailure {
+                            logger.error("<download-file-error> Ошибка загрузки файла ${file.id}", it)
+                        }.getOrNull()
+                    }
+
                 DirectMessage(
                     channelId = post.channelId,
                     userId = post.userId,
                     userName = event.data.jsonObject["sender_name"]?.jsonPrimitive?.content ?: "unknown",
                     text = post.message,
+                    attachments = attachments,
                 )
             }.onEach { logger.info("<eb86d64d> Сообщение от пользователя ${it.userName}: ${it.text.take(200)}") }
 

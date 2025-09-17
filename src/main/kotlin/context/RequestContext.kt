@@ -10,5 +10,5 @@ data class RequestContext(
     val userName: String,
     val userContext: UserContext,
     val requestUuid: String,
-    val message: DirectMessage
+    val message: DirectMessage,
 )

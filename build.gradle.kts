@@ -36,7 +36,6 @@ dependencies {
     implementation(libs.hoplite.core)
     implementation(libs.hoplite.yaml)
     implementation(libs.suspendapp)
-    
     implementation(libs.redis)
 
     testImplementation(libs.kotlin.junit)

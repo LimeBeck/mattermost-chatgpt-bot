@@ -15,6 +15,14 @@ data class DirectMessage(
     val userId: UserId,
     val text: String,
     val userName: String,
+    val attachments: List<Attachment> = emptyList(),
+)
+
+data class Attachment(
+    val id: String,
+    val name: String,
+    val mimeType: String,
+    val data: ByteArray,
 )
 
 data class NewChatStartedEvent(
