@@ -53,7 +53,7 @@ class CompletionCommandProcessor(
                             Content.File(
                                 FileData(
                                     filename = attachment.name,
-                                    fileData = base64,
+                                    fileData = "data:${attachment.mimeType};base64,$base64",
                                 ),
                             ),
                         )
