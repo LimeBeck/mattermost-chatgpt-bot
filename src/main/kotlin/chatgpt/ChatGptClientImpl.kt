@@ -28,9 +28,9 @@ class ChatGptClientImpl(
         HttpClient(Apache) {
             engine {
                 followRedirects = true
-                socketTimeout = 240_000
+                socketTimeout = 10 * 60 * 1000
                 connectTimeout = 10_000
-                connectionRequestTimeout = 240_000
+                connectionRequestTimeout = 10 * 60 * 1000
             }
 
             install(Logging) {
