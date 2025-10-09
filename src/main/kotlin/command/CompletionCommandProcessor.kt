@@ -32,7 +32,7 @@ class CompletionCommandProcessor(
             }
 
         ctx.message.attachments
-            .filter { !it.mimeType.startsWith("image") || it.mimeType.lowercase() != "application/pdf" }
+            .filter { !it.mimeType.startsWith("image") && it.mimeType.lowercase() != "application/pdf" }
             .takeIf { it.isNotEmpty() }
             ?.let {
                 logger.warn("<ea812cf0c> Пользователь приложил недопустимый тип файла (${it.joinToString { a -> a.mimeType }})")
