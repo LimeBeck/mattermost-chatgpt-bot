@@ -9,9 +9,13 @@ import io.ktor.client.plugins.logging.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonContentPolymorphicSerializer
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.jsonObject
 import org.slf4j.LoggerFactory
 
 class ChatGptClientImpl(
@@ -96,9 +100,19 @@ class ChatGptClientImpl(
                     setBody(request)
                 }.body<CompletionResponse>()
 
-            logger.info("<6f1106dd> Запрос успешно завершен, использовано ${response.usage.totalTokens} токенов")
-            val text = response.choices.first().message.content
-            Completion(text, response.usage.totalTokens)
+
+            return when (response) {
+                is CompletionResponse.Error -> {
+                    logger.error("<6f1156da> Запрос завершен с ошибкой: ${response.error}")
+                    Result.failure(RuntimeException(response.error.message))
+                }
+
+                is CompletionResponse.Success -> {
+                    logger.info("<6f1106dd> Запрос успешно завершен, использовано ${response.usage.totalTokens} токенов")
+                    val text = response.choices.first().message.content
+                    Result.success(Completion(text, response.usage.totalTokens))
+                }
+            }
         }
 
     @Serializable
@@ -133,12 +147,36 @@ class ChatGptClientImpl(
         }
     }
 
-    @Serializable
-    data class CompletionResponse(
-        val choices: List<Choice>,
-        val usage: Usage,
-        val model: String,
-    ) {
+    @Serializable(with = CompletionResponse.Serializer::class)
+    sealed interface CompletionResponse {
+        class Serializer : JsonContentPolymorphicSerializer<CompletionResponse>(CompletionResponse::class) {
+            override fun selectDeserializer(element: JsonElement): DeserializationStrategy<CompletionResponse> =
+                if (element.jsonObject["error"] != null) {
+                    Error.serializer()
+                } else {
+                    Success.serializer()
+                }
+        }
+
+        @Serializable
+        data class Error(
+            val error: ErrorModel
+        ) : CompletionResponse
+
+        @Serializable
+        data class ErrorModel(
+            val message: String,
+            val type: String,
+            val code: String,
+        )
+
+        @Serializable
+        data class Success(
+            val choices: List<Choice>,
+            val usage: Usage,
+            val model: String,
+        ) : CompletionResponse
+
         @Serializable
         data class Choice(
             val message: Message,

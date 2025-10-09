@@ -3,14 +3,10 @@ package chatgpt
 import dev.limebeck.chatgpt.ChatGptClientImpl
 import dev.limebeck.chatgpt.ImageUrl
 import dev.limebeck.chatgpt.Role
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.encodeToJsonElement
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.*
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ChatGptSerializationTest {
@@ -55,20 +51,19 @@ class ChatGptSerializationTest {
             contents.any { part ->
                 val obj = part.jsonObject
                 obj["type"]?.jsonPrimitive?.content == "image_url" &&
-                    obj["image_url"]?.jsonObject?.get("url")?.jsonPrimitive?.content ==
-                    "data:image/png;base64,AAA"
+                        obj["image_url"]?.jsonObject?.get("url")?.jsonPrimitive?.content ==
+                        "data:image/png;base64,AAA"
             },
         )
     }
 
     @Test
     fun `deserialize completion response with string content`() {
-        val json =
-            Json {
-                ignoreUnknownKeys = true
-                encodeDefaults = true
-                classDiscriminator = "type"
-            }
+        val json = Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+            classDiscriminator = "type"
+        }
 
         val payload =
             """
@@ -93,7 +88,36 @@ class ChatGptSerializationTest {
 
         val response = json.decodeFromString<ChatGptClientImpl.CompletionResponse>(payload)
 
+        assertIs<ChatGptClientImpl.CompletionResponse.Success>(response)
+
         val content = response.choices.first().message.content
         assertEquals("Hello!", content)
+    }
+
+    @Test
+    fun `deserialize completion response with error string content`() {
+        val json = Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+            classDiscriminator = "type"
+        }
+
+        val payload =
+            """
+                {                                                                                                                                                                       
+                    "error": {                                                                                                                                                          
+                        "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.",                                                                                                                                                             
+                        "type": "insufficient_quota",                                                                                                                                   
+                        "param": null,                                                                                                                                                  
+                        "code": "insufficient_quota"                                                                                                                                    
+                    }                                                                                                                                                                   
+                }
+            """.trimIndent()
+
+        val response = json.decodeFromString<ChatGptClientImpl.CompletionResponse>(payload)
+
+        assertIs<ChatGptClientImpl.CompletionResponse.Error>(response)
+
+        assertEquals("insufficient_quota", response.error.type)
     }
 }

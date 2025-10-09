@@ -1,16 +1,11 @@
 package dev.limebeck.command
 
-import dev.limebeck.chatgpt.ChatGptClient
-import dev.limebeck.chatgpt.Content
-import dev.limebeck.chatgpt.FileData
-import dev.limebeck.chatgpt.ImageUrl
-import dev.limebeck.chatgpt.Message
-import dev.limebeck.chatgpt.Role
+import dev.limebeck.chatgpt.*
 import dev.limebeck.context.RequestContext
 import dev.limebeck.context.UserContextService
 import dev.limebeck.logger
 import dev.limebeck.mattermost.MattermostClient
-import java.util.Base64
+import java.util.*
 
 class CompletionCommandProcessor(
     private val gptClient: ChatGptClient,
@@ -61,30 +56,33 @@ class CompletionCommandProcessor(
                 }
             }
 
-        val response =
-            gptClient.getCompletion(
-                Message(Role.USER, contents),
-                previousMessages,
-            ).onFailure { t ->
-                logger.error("<ea88cf0c> Произошла ошибка при обработке запроса ${ctx.requestUuid}", t)
-            }.onSuccess { response ->
-                userContextService.updateUserContext(
-                    ctx.userId,
-                    ctx.userContext.copy(
-                        previousMessages =
-                            previousMessages +
+        val response = gptClient.getCompletion(
+            Message(Role.USER, contents),
+            previousMessages,
+        ).onFailure { t ->
+            logger.error("<ea88cf0c> Произошла ошибка при обработке запроса ${ctx.requestUuid}", t)
+        }.onSuccess { response ->
+            userContextService.updateUserContext(
+                ctx.userId,
+                ctx.userContext.copy(
+                    previousMessages =
+                        previousMessages +
                                 Message(Role.USER, contents) +
                                 Message(Role.ASSISTANT, listOf(Content.Text(response.text))),
-                    ),
-                )
-            }
+                ),
+            )
+        }
 
-        mattermostClient.sendMessage(
-            ctx.channelId,
-            response.getOrNull()?.text?.let {
-                val tokens = response.getOrThrow().tokensConsumed
-                "$it\n\nВаш запрос потребил $tokens токенов"
-            } ?: "Произошла ошибка при обработке запроса. Код ошибки ${ctx.requestUuid}",
-        )
+        response.onSuccess { r ->
+            mattermostClient.sendMessage(
+                ctx.channelId,
+                "${r.text}\n\nВаш запрос потребил ${r.tokensConsumed} токенов",
+            )
+        }.onFailure { t ->
+            mattermostClient.sendMessage(
+                ctx.channelId,
+                "Произошла ошибка при обработке запроса. Код ошибки ${ctx.requestUuid}.\n${t.message}",
+            )
+        }
     }
 }
