@@ -31,14 +31,18 @@ class CompletionCommandProcessor(
                 ctx.userContext.previousMessages
             }
 
-        if (ctx.message.attachments.any { !it.mimeType.startsWith("image") || it.mimeType != "application/pdf" }) {
-            logger.warn("<ea812cf0c> Пользователь приложил недопустимый тип файла")
-            mattermostClient.sendMessage(
-                ctx.channelId,
-                "Добавлен недопустимый тип файла. Я могу работать только с изображениями и pdf",
-            )
-            return
-        }
+        ctx.message.attachments
+            .filter { !it.mimeType.startsWith("image") || it.mimeType.lowercase() != "application/pdf" }
+            .takeIf { it.isNotEmpty() }
+            ?.let {
+                logger.warn("<ea812cf0c> Пользователь приложил недопустимый тип файла (${it.joinToString { a -> a.mimeType }})")
+                mattermostClient.sendMessage(
+                    ctx.channelId,
+                    "Добавлен недопустимый тип файла (${it.joinToString { a -> a.mimeType }}). " +
+                            "Я могу работать только с изображениями и pdf",
+                )
+                return
+            }
 
         val contents =
             buildList {
