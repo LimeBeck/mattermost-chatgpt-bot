@@ -19,6 +19,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import org.slf4j.LoggerFactory
 import utils.splitMarkdown
+import kotlin.time.Duration.Companion.seconds
 
 class MattermostClientImpl(
     baseUrl: String,
@@ -45,7 +46,7 @@ class MattermostClientImpl(
         }
 
         install(WebSockets) {
-            pingInterval = 20_000
+            pingInterval = 20.seconds
         }
 
         install(Logging) {
