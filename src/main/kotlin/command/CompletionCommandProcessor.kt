@@ -30,6 +30,16 @@ class CompletionCommandProcessor(
             } else {
                 ctx.userContext.previousMessages
             }
+
+        if (ctx.message.attachments.any { !it.mimeType.startsWith("image") || it.mimeType != "application/pdf" }) {
+            logger.warn("<ea812cf0c> Пользователь приложил недопустимый тип файла")
+            mattermostClient.sendMessage(
+                ctx.channelId,
+                "Добавлен недопустимый тип файла. Я могу работать только с изображениями и pdf",
+            )
+            return
+        }
+
         val contents =
             buildList {
                 if (ctx.message.text.isNotBlank()) {

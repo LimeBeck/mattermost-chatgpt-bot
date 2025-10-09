@@ -1,4 +1,4 @@
-FROM bellsoft/liberica-openjdk-alpine:21 AS jvm_build
+FROM bellsoft/liberica-openjdk-alpine:24 AS jvm_build
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ RUN ./gradlew -i --write-verification-metadata sha256 help
 COPY . /app
 RUN rm ./gradle/verification-metadata.xml && ./gradlew -i installDist
 
-FROM bellsoft/liberica-openjre-alpine:21
+FROM bellsoft/liberica-openjre-alpine:24
 
 ENV APPLICATION_USER ktor
 RUN adduser -D -g '' $APPLICATION_USER
